@@ -1,46 +1,72 @@
-// background.js
-
-// Initialize storage on install
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.get(["m3u8_urls"], (result) => {
-    if (!result.m3u8_urls) {
-      chrome.storage.local.set({ m3u8_urls: [] });
+  chrome.storage.local.get(["captured_resources"], (result) => {
+    if (!result.captured_resources) {
+      chrome.storage.local.set({ captured_resources: [] });
     }
   });
 });
 
-// Listener filter
 const filter = {
-  urls: ["*://*/*.m3u8*", "*://*/*.m3u8"]
+  urls: ["*://*/*.m3u8*", "*://*/*.vtt*", "*://*/*.mpd*", "*://*/*.key*"]
 };
 
-// Listen for network requests
-chrome.webRequest.onBeforeRequest.addListener(
+chrome.webRequest.onBeforeSendHeaders.addListener(
   (details) => {
+    if (details.tabId === -1) return; // Non-tab requests
+
     const url = details.url;
+    let type = null;
     
-    // basic check to ensure it actually has .m3u8 in it (filter does mostly this, but double check)
-    if (url.includes(".m3u8")) {
-      addUrl(url);
+    if (url.includes(".m3u8")) type = "m3u8";
+    else if (url.includes(".vtt")) type = "vtt";
+    else if (url.includes(".mpd")) type = "mpd"; // DASH
+    else if (url.includes(".key")) type = "key"; // DRM
+
+    if (type) {
+      const headers = {};
+      if (details.requestHeaders) {
+        details.requestHeaders.forEach(h => {
+          if (['Referer', 'User-Agent', 'Cookie', 'Authorization'].includes(h.name)) {
+            headers[h.name] = h.value;
+          }
+        });
+      }
+
+      addResource(url, type, headers, details.tabId);
     }
   },
-  filter
+  filter,
+  ["requestHeaders", "extraHeaders"]
 );
 
-function addUrl(url) {
-  chrome.storage.local.get(["m3u8_urls"], (result) => {
-    const urls = result.m3u8_urls || [];
+function addResource(url, type, headers = {}, tabId) {
+  chrome.storage.local.get(["captured_resources"], (result) => {
+    const resources = result.captured_resources || [];
     
-    // Avoid duplicates
-    if (!urls.includes(url)) {
-      // Add to beginning of list
-      urls.unshift(url);
-      
-      // limit storage to last 100 to prevent explosion? 
-      // User didn't ask for limit, but good practice. strict req said "Collect all", so I'll keep it unbounded or large.
-      // Let's just keep it simple.
-      
-      chrome.storage.local.set({ m3u8_urls: urls });
+    // Avoid duplicates by URL (simple check)
+    const existingIndex = resources.findIndex(r => r.url === url);
+    
+    const resourceItem = {
+      url: url,
+      type: type,
+      headers: headers,
+      tabId: tabId,
+      timestamp: Date.now()
+    };
+
+    if (existingIndex > -1) {
+      // Move to top and update
+      resources.splice(existingIndex, 1);
+      resources.unshift(resourceItem);
+    } else {
+      resources.unshift(resourceItem);
     }
+
+    // Limit size
+    if (resources.length > 500) {
+      resources.splice(500);
+    }
+
+    chrome.storage.local.set({ captured_resources: resources });
   });
 }
