@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "M3U8 Sniffer",
+  "version": "1.0",
+  "description": "Detects and collects .m3u8 URLs from network requests.",
+  "permissions": [
+    "webRequest",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "M3U8 Sniffer"
+  },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}
